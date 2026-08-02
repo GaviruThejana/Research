@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Environment
+.env
+*.env.local
+
+# Model artifacts
+backend/weights/*.pth
+backend/checkpoints/
+backend/data/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

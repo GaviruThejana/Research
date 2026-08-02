@@ -1,0 +1,63 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: skin-disease-backend:latest
+    container_name: skin-disease-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      SKINAI_ENVIRONMENT: production
+      SKINAI_DEBUG: "false"
+      SKINAI_HOST: 0.0.0.0
+      SKINAI_PORT: "8000"
+      SKINAI_CORS_ORIGINS: "http://localhost,http://localhost:80,http://localhost:5173"
+      SKINAI_MODEL_DIR: /app/weights
+      SKINAI_MODEL_FILENAME: multimodal_skin_net.pth
+      SKINAI_BACKBONE: resnet50
+      SKINAI_NUM_CLASSES: "7"
+      SKINAI_TOP_K: "3"
+      SKINAI_DEVICE_PREFERENCE: auto
+      SKINAI_TRAIN_DATA_DIR: /app/data
+      SKINAI_CHECKPOINT_DIR: /app/checkpoints
+      SKINAI_LOG_LEVEL: INFO
+    volumes:
+      - model-weights:/app/weights
+      - training-data:/app/data
+      - checkpoints:/app/checkpoints
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - skin-disease-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    image: skin-disease-frontend:latest
+    container_name: skin-disease-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - skin-disease-net
+
+networks:
+  skin-disease-net:
+    driver: bridge
+
+volumes:
+  model-weights:
+  training-data:
+  checkpoints:
