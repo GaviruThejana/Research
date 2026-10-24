@@ -1,0 +1,35 @@
+{
+    "img_size": 224,
+    "num_classes": 7,
+    "ham_classes": [
+        "akiec",
+        "bcc",
+        "bkl",
+        "df",
+        "mel",
+        "nv",
+        "vasc"
+    ],
+    "use_metadata": false,
+    "meta_feature_mode": "both",
+    "apply_dullrazor": false,
+    "age_mean": 45.0,
+    "age_std": 1.0,
+    "localization_categories": [
+        "back",
+        "lower extremity",
+        "trunk",
+        "upper extremity",
+        "abdomen",
+        "face",
+        "chest",
+        "foot",
+        "unknown",
+        "neck",
+        "scalp",
+        "hand",
+        "ear",
+        "genital",
+        "acral"
+    ]
+}

@@ -16,78 +16,51 @@ Grad-CAM).
 
 ```
 skin-disease-app/
-├── backend/                 FastAPI + PyTorch inference & training service
-│   ├── app/
-│   │   ├── config.py         pydantic-settings environment configuration
-│   │   ├── schemas.py         Pydantic v2 request/response models
-│   │   ├── main.py            FastAPI app, middleware, exception handlers
-│   │   ├── logging_config.py  Structured JSON logging
-│   │   ├── models/
-│   │   │   ├── multimodal_net.py   CNN + metadata MLP fusion network
-│   │   │   └── explainability.py   Grad-CAM engine
-│   │   ├── services/
-│   │   │   ├── preprocessing.py    Albumentations transforms, metadata encoding
-│   │   │   ├── inference.py        Thread-safe inference manager
-│   │   │   └── trainer.py          Stratified K-Fold training pipeline
-│   │   └── api/
-│   │       └── routes.py           /health, /api/v1/predict, /api/v1/train
-│   ├── tests/                pytest suite (preprocessing, model, API)
-│   ├── requirements.txt
-│   ├── Dockerfile            Multi-stage (builder venv + slim runtime)
-│   └── pytest.ini
-├── frontend/                 React + Tailwind SPA
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── api/client.js
-│   │   └── components/
-│   │       ├── Dropzone.jsx
-│   │       ├── MetadataForm.jsx
-│   │       ├── ConfidenceChart.jsx
-│   │       ├── GradCamViewer.jsx
-│   │       └── PredictionResults.jsx
-│   ├── Dockerfile             Multi-stage (Node build + Nginx serve)
-│   └── nginx.conf
-├── docker-compose.yml
-└── README.md
+├── backend/        FastAPI classifier (main.py: MobileNetV3 features + Random Forest), port 8001
+│   ├── main.py       the service that runs (loads backend/weights/)
+│   ├── weights/      trained models + preprocessing config
+│   ├── app/          older structured package (+ /train); its weights are not included
+│   └── Dockerfile
+├── feedback-api/   Node/Express API, port 5000: auth (JWT), predictions (proxied to
+│                   FastAPI), doctor directory, consultations (PDF + email), feedback
+├── web/            React web app, port 5173: patients, doctors and the admin
+│                   portal (/admin); same features as the mobile app
+├── mobile/         Expo (React Native) app; talks to the Node API
+├── docs/           E2E test plan, Postman collection
+├── start-all.ps1   starts everything for local development (Windows)
+└── docker-compose.yml
 ```
+
+Request flow: web / mobile → Node API (:5000) → FastAPI (:8001, localhost only) and MongoDB.
 
 ---
 
 ## 1. Local development (without Docker)
 
-### Backend
+On Windows, start everything with one command from the repo root:
 
 ```bash
-cd backend
-python3.10 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env               # adjust as needed
-
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+powershell -ExecutionPolicy Bypass -File .\start-all.ps1
 ```
 
-The API will be available at `http://localhost:8000`, with interactive
-docs at `http://localhost:8000/docs`.
+It opens a window per service and waits until the Node API has connected to MongoDB:
 
-> On first run, if no trained weights exist at `SKINAI_MODEL_DIR`, the
-> service automatically falls back to an ImageNet-pretrained backbone with
-> a randomly initialized classification head so the API remains fully
-> functional end-to-end (predictions will not be clinically meaningful
-> until you train and place real weights — see Section 4).
+| Service | Folder | URL |
+|---|---|---|
+| FastAPI classifier | `backend/` | http://127.0.0.1:8001 (docs: `/docs`; localhost only) |
+| Node API | `feedback-api/` | http://localhost:5000 (phones: `http://<PC-LAN-IP>:5000`) |
+| Web app | `web/` | http://localhost:5173 (admin portal: `/admin`) |
+| Expo mobile app | `mobile/` | QR code in its window |
 
-### Frontend
+Before the first run:
 
-```bash
-cd frontend
-npm install
-cp .env.example .env               # optional; defaults to dev-server proxy
-npm run dev
-```
+- `feedback-api/.env`: copy from `.env.example` and set `MONGODB_URI` and `JWT_SECRET`.
+- `mobile/.env`: `EXPO_PUBLIC_NODE_API_URL=http://<PC-LAN-IP>:5000` (the script warns when your IP changes).
+- `npm install` in `feedback-api/`, `web/` and `mobile/`; `backend/venv` with `pip install -r requirements.txt`.
+- First admin: `cd feedback-api && npm run create-admin -- you@example.com "StrongPass123" "Admin"`.
 
-The SPA will be available at `http://localhost:5173` and will proxy
-`/api/*` and `/health` requests to `http://localhost:8000` (configurable
-via `VITE_API_PROXY_TARGET` in `vite.config.js` / `.env`).
+The web app's dev server proxies `/api` and `/uploads` to the Node API
+(`VITE_NODE_API_PROXY_TARGET` in `web/.env`); it never calls FastAPI directly.
 
 ---
 
@@ -113,32 +86,49 @@ The suite covers:
 
 ## 3. Docker deployment
 
-Build and run both services with Docker Compose:
+Three containers (see `docker-compose.yml`):
+
+| Service | URL | What it is |
+|---|---|---|
+| `web` | http://localhost:3000 (admin portal: `/admin`) | Web app for patients, doctors and admins (nginx) |
+| `node-api` | http://localhost:5000 | Node API; the mobile app connects here (`http://<PC-LAN-IP>:5000`) |
+| `backend` | internal only | FastAPI classifier (`backend/main.py`) with the models baked in |
+
+The Node API reads its secrets (`MONGODB_URI`, `JWT_SECRET`, `SMTP_*`) from
+`feedback-api/.env` at runtime, so create that file first (see
+`feedback-api/.env.example`). Nothing secret is copied into the images.
 
 ```bash
-docker compose build
-docker compose up -d
+docker compose up -d --build
 ```
 
-- Frontend (Nginx, serving the built SPA and proxying `/api` + `/health`
-  to the backend container): `http://localhost`
-- Backend (FastAPI): `http://localhost:8000`
+Ports are configurable without editing the file, e.g.
+`WEB_PORT=8081 NODE_API_PORT=5001 docker compose up -d`.
 
-Named volumes (`model-weights`, `training-data`, `checkpoints`) persist
-model artifacts across container restarts. To use a pre-trained checkpoint,
-copy it into the `model-weights` volume:
+Useful commands:
 
 ```bash
-docker cp ./multimodal_skin_net.pth skin-disease-backend:/app/weights/multimodal_skin_net.pth
-docker restart skin-disease-backend
+docker compose logs -f node-api                     # API log (request ids, predictions, emails)
+docker compose exec node-api npm run seed           # sample doctors + patient
+docker compose exec node-api npm run create-admin -- admin@example.com "StrongPass123" "Admin"
+docker compose exec node-api ls outbox              # emails saved when SMTP isn't configured
 ```
+
+Uploaded lesion images and saved emails persist in the `node-uploads` and
+`node-outbox` volumes. Model weights are part of the `backend` image: after
+changing files in `backend/weights/`, rebuild with `docker compose build backend`.
 
 To tear down:
 
 ```bash
 docker compose down            # keep volumes
-docker compose down -v         # also remove volumes
+docker compose down -v         # also delete uploaded images and saved emails
 ```
+
+> Upgrading from an older setup (separate `frontend` container): run
+> `docker compose up -d --build --remove-orphans`, then optionally remove the
+> unused `model-weights`, `training-data` and `checkpoints` volumes
+> (`docker volume ls`, `docker volume rm <name>`).
 
 ---
 
@@ -197,15 +187,16 @@ sudo usermod -aG docker $USER && newgrp docker
 git clone <your-repo-url> skin-disease-app
 cd skin-disease-app
 
-# 3. (Optional) place a trained checkpoint under backend/weights/
-#    before the first build, or upload it into the running volume later.
+# 3. Create feedback-api/.env (MONGODB_URI, JWT_SECRET, SMTP_*); models in
+#    backend/weights/ are baked into the backend image at build time.
 
 # 4. Build and launch
 docker compose build
 docker compose up -d
 
-# 5. Open inbound firewall ports 80 (frontend) and 8000 (backend API),
-#    or place a reverse proxy / load balancer (e.g. Nginx, ALB) in front.
+# 5. Open inbound firewall ports 3000 (web app) and 5000 (Node API, for the
+#    mobile app), or place a reverse proxy / load balancer (e.g. Nginx, ALB)
+#    in front. FastAPI is never exposed.
 ```
 
 For GPU-accelerated inference on a CUDA-enabled VM, install the NVIDIA

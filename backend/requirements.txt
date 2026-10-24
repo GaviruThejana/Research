@@ -13,7 +13,8 @@ Pillow==10.4.0
 albumentations>=1.4.15
 
 pandas>=2.2.2
-scikit-learn>=1.5.1
+# Must match the version the *.joblib Random Forest models were saved with.
+scikit-learn==1.6.1
 
 httpx==0.27.2
 pytest==8.3.3

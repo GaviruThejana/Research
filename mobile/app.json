@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "SkinAI",
+    "slug": "skin-disease-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SkinAI needs access to your photos to analyse a skin lesion.",
+          "cameraPermission": "SkinAI needs camera access to photograph a skin lesion."
+        }
+      ],
+      "expo-secure-store",
+      "expo-status-bar"
+    ]
+  }
+}
