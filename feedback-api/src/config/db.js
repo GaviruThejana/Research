@@ -11,10 +11,15 @@ if (process.env.MONGODB_DNS_SERVERS) {
 /**
  * Mongoose options hardened for unreliable local DNS:
  * - family 4: Atlas shards are reachable over IPv4; avoids broken IPv6 paths.
+ * - Short timeouts: fail fast when a serverless instance cannot reach MongoDB.
  * - lookup: OS resolver first, DNS-over-HTTPS fallback (MONGODB_DOH_FALLBACK=false disables).
  */
 function mongoConnectOptions() {
-  const options = { serverSelectionTimeoutMS: 20000, family: 4 };
+  const options = {
+    family: 4,
+    serverSelectionTimeoutMS: 5000,
+    connectTimeoutMS: 5000,
+  };
   if (process.env.MONGODB_DOH_FALLBACK !== "false") {
     options.lookup = lookupWithDohFallback;
   }
