@@ -1,63 +1,78 @@
+# SkinAI stack:
+#
+#   browser ──► web      :${WEB_PORT:-3000}       (patients, doctors + admin portal at /admin, nginx)
+#   phones  ──► node-api :${NODE_API_PORT:-5000}  (Expo app talks to the Node API directly)
+#                  │
+#                  ├──► backend (FastAPI + model, internal only, not published)
+#                  └──► MongoDB Atlas (MONGODB_URI from feedback-api/.env)
+#
+# Usage:  docker compose up -d --build
+# Ports can be changed without editing this file, e.g.  WEB_PORT=8081 docker compose up -d
+
 services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    image: skin-disease-backend:latest
-    container_name: skin-disease-backend
+    image: skinai-backend:latest
+    container_name: skinai-backend
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # No published port: only node-api (inside the network) calls it,
+    # same as binding FastAPI to 127.0.0.1 in local development.
+    expose:
+      - "8000"
     environment:
-      SKINAI_ENVIRONMENT: production
-      SKINAI_DEBUG: "false"
-      SKINAI_HOST: 0.0.0.0
-      SKINAI_PORT: "8000"
-      SKINAI_CORS_ORIGINS: "http://localhost,http://localhost:80,http://localhost:5173"
       SKINAI_MODEL_DIR: /app/weights
-      SKINAI_MODEL_FILENAME: multimodal_skin_net.pth
-      SKINAI_BACKBONE: resnet50
-      SKINAI_NUM_CLASSES: "7"
-      SKINAI_TOP_K: "3"
-      SKINAI_DEVICE_PREFERENCE: auto
-      SKINAI_TRAIN_DATA_DIR: /app/data
-      SKINAI_CHECKPOINT_DIR: /app/checkpoints
-      SKINAI_LOG_LEVEL: INFO
-    volumes:
-      - model-weights:/app/weights
-      - training-data:/app/data
-      - checkpoints:/app/checkpoints
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
     networks:
-      - skin-disease-net
+      - skinai-net
 
-  frontend:
+  node-api:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: ""
-    image: skin-disease-frontend:latest
-    container_name: skin-disease-frontend
+      context: ./feedback-api
+    image: skinai-node-api:latest
+    container_name: skinai-node-api
     restart: unless-stopped
+    # Secrets (MONGODB_URI, JWT_SECRET, SMTP_*) come from the same .env used in
+    # local development; they are read at runtime, never copied into the image.
+    env_file:
+      - ./feedback-api/.env
+    # These override the matching .env values for the container setup.
+    environment:
+      PORT: "5000"
+      FASTAPI_URL: http://backend:8000
+      # Behind nginx: trust X-Forwarded-For so rate limits see the real client IP.
+      TRUST_PROXY: "true"
+      # Browser origins that call the API directly (the nginx-served web app is
+      # same-origin; 5173 = local Vite dev server, 8081 = Expo web).
+      CORS_ORIGINS: http://localhost:${WEB_PORT:-3000},http://localhost:5173,http://localhost:8081
     ports:
-      - "80:80"
+      # Published for the mobile app (phones on your Wi-Fi use http://<PC-LAN-IP>:5000).
+      - "${NODE_API_PORT:-5000}:5000"
+    volumes:
+      - node-uploads:/app/uploads # lesion images (referenced by MongoDB records)
+      - node-outbox:/app/outbox # emails saved when SMTP isn't configured
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
     networks:
-      - skin-disease-net
+      - skinai-net
+
+  web:
+    build:
+      context: ./web
+    image: skinai-web:latest
+    container_name: skinai-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      - node-api
+    networks:
+      - skinai-net
 
 networks:
-  skin-disease-net:
+  skinai-net:
     driver: bridge
 
 volumes:
-  model-weights:
-  training-data:
-  checkpoints:
+  node-uploads:
+  node-outbox:

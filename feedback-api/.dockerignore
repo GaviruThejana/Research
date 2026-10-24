@@ -1,0 +1,5 @@
+node_modules/
+# Secrets are passed at runtime (env_file in docker-compose.yml), never baked in.
+.env
+uploads/
+outbox/

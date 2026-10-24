@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent; /* app-like taps on mobile */
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-feature-settings: "cv11", "ss01"; /* Inter: clearer 1/l/I for medical data */
+  }
+
+  /* 16px inputs stop iOS Safari from zooming in on focus. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  /*
+   * WCAG 2.4.7: a clearly visible keyboard focus indicator everywhere,
+   * shown only for keyboard users (not on mouse/touch).
+   */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-canvas;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

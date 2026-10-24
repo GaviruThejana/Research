@@ -16,8 +16,10 @@ backend/checkpoints/
 backend/data/
 
 # Node / frontend
-frontend/node_modules/
-frontend/dist/
+web/node_modules/
+web/dist/
+feedback-api/node_modules/
+mobile/node_modules/
 
 # OS
 .DS_Store

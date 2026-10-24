@@ -1,0 +1,13 @@
+# Keep the build context small: the local venv alone is several GB.
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.env
+checkpoints/
+data/
+node_modules/
+package.json
+package-lock.json
